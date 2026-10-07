@@ -1,0 +1,67 @@
+# H2 EDU policy server.
+#
+# network_mode: host is chosen to match isaac-lab-base (IsaacLab's
+# docker/docker-compose.yaml:144 already uses it). With all three containers on
+# the host network there is no user-defined bridge, no service DNS and no port
+# publishing to keep in sync: every peer reaches the policy at 127.0.0.1:5555,
+# and so does a process running directly on the host.
+name: h2-policy
+
+services:
+  h2-policy-server:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile
+    image: h2-policy-server:latest
+    container_name: h2-policy-server
+    network_mode: host
+    restart: unless-stopped
+    environment:
+      - WBC_H12_ROOT=/opt/wbc_h12
+      - H2_POLICY_BIND=${H2_POLICY_BIND:-tcp://0.0.0.0:5555}
+      - H2_POLICY_PROVIDERS=${H2_POLICY_PROVIDERS:-CPUExecutionProvider}
+      # Colon-separated extra motion roots, discovered after the upstream demo
+      # clips. Paths are as seen INSIDE this container.
+      - H2_MOTION_ROOTS=${H2_MOTION_ROOTS:-/opt/eval_motions}
+    volumes:
+      # wbc_h12 is upstream-owned and must stay byte-identical. read_only makes
+      # that a kernel guarantee rather than a convention: a write from inside
+      # this container fails with EROFS.
+      - type: bind
+        source: ../../wbc_h12
+        target: /opt/wbc_h12
+        read_only: true
+      # The interface package is mounted rather than baked in, so editing it on
+      # the host takes effect on restart without a rebuild. The COPY in the
+      # Dockerfile keeps the image runnable on its own.
+      # Evaluation-owned motion sets, kept out of wbc_h12 entirely. Read-only:
+      # the server discovers clips here, it never writes them.
+      - type: bind
+        source: ../../eval_datasets/motions
+        target: /opt/eval_motions
+        read_only: true
+      # The official SONIC SMPL source set. Not servable -- these are SMPL
+      # motions, not H2 motion_lib clips -- but the selection tooling reads them
+      # here to choose which ones are worth retargetting. Read-only for the same
+      # reason as wbc_h12: it is a downloaded artefact, not working state.
+      - type: bind
+        source: ../../eval_datasets/smpl_src/hf/data
+        target: /opt/smpl_src
+        read_only: true
+      - type: bind
+        source: ../h2_policy_if
+        target: /srv/h2_policy_if
+        read_only: true
+      - type: bind
+        source: ../server
+        target: /srv/server
+        read_only: true
+      - type: bind
+        source: ../tools
+        target: /srv/tools
+        read_only: true
+      # The dataset tooling, so subset selection runs where joblib and the SMPL
+      # source both already are. Writable: it emits the chosen subset.
+      - type: bind
+        source: ../../eval_datasets/tools
+        target: /srv/eval_tools

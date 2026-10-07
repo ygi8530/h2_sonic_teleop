@@ -1,0 +1,97 @@
+diff --git a/gear_sonic/scripts/pico_manager_thread_server.py b/gear_sonic/scripts/pico_manager_thread_server.py
+index 3983530..67f9004 100644
+--- a/gear_sonic/scripts/pico_manager_thread_server.py
++++ b/gear_sonic/scripts/pico_manager_thread_server.py
+@@ -1095,6 +1095,22 @@ class ThreePointPose:
+             traceback.print_exc()
+             return False
+ 
++    def _fk_key_frame_poses(self) -> dict:
++        """FK reference poses for calibration (robot-specific hook).
++
++        Default: G1 key frames at the override q (29 actuated DOFs) or the
++        model default pose. Subclasses (e.g. H2) override this to swap the
++        robot without touching the calibration math.
++        """
++        # Convert 29-DOF override to full model config if needed
++        if self._override_robot_q is not None:
++            robot_q = self._robot_model.get_configuration_from_actuated_joints(
++                body_actuated_joint_values=self._override_robot_q[:29]
++            )
++        else:
++            robot_q = None
++        return get_g1_key_frame_poses(self._robot_model, q=robot_q)
++
+     def _capture_calibration(self, vr_3pt_pose: np.ndarray) -> None:
+         """Capture calibration offsets from vr_3pt_pose against G1 FK reference.
+         If neck calibration already exists (e.g. from calibrate_now), it is preserved
+@@ -1125,14 +1141,7 @@ class ThreePointPose:
+                 "Ensure gear_sonic.utils.teleop.vis.vr3pt_pose_visualizer is available."
+             )
+ 
+-        # Convert 29-DOF override to full model config if needed
+-        if self._override_robot_q is not None:
+-            robot_q = self._robot_model.get_configuration_from_actuated_joints(
+-                body_actuated_joint_values=self._override_robot_q[:29]
+-            )
+-        else:
+-            robot_q = None
+-        g1_poses = get_g1_key_frame_poses(self._robot_model, q=robot_q)
++        g1_poses = self._fk_key_frame_poses()
+ 
+         g1_lwrist_pos = g1_poses["left_wrist"]["position"]
+         g1_rwrist_pos = g1_poses["right_wrist"]["position"]
+@@ -1912,6 +1921,7 @@ def run_pico_manager(
+     enable_waist_tracking: bool = False,
+     enable_smpl_vis: bool = False,
+     input_source: str = "xrt",
++    robot: str = "g1",
+ ):
+     """
+     Manager: creates shared PUB socket and runs pose/planner streamers based on current mode.
+@@ -1935,13 +1945,19 @@ def run_pico_manager(
+     except Exception:
+         pass
+ 
+-    three_point = ThreePointPose(
+-        enable_vis_vr3pt=enable_vis_vr3pt,
+-        with_g1_robot=with_g1_robot,
+-        enable_waist_tracking=enable_waist_tracking,
+-        enable_smpl_vis=enable_smpl_vis,
+-        log_prefix="PoseLoop",
+-    )
++    if robot == "h2":
++        # H2 FK calibration reference; VR3PT math itself is unchanged.
++        from gear_sonic.utils.teleop.h2_three_point import H2ThreePointPose
++
++        three_point = H2ThreePointPose(log_prefix="PoseLoop")
++    else:
++        three_point = ThreePointPose(
++            enable_vis_vr3pt=enable_vis_vr3pt,
++            with_g1_robot=with_g1_robot,
++            enable_waist_tracking=enable_waist_tracking,
++            enable_smpl_vis=enable_smpl_vis,
++            log_prefix="PoseLoop",
++        )
+ 
+     pose_streamer = PoseStreamer(
+         socket=socket,
+@@ -2241,6 +2257,10 @@ if __name__ == "__main__":
+         action="store_true",
+         help="Enable SMPL body joint visualization (24 joint spheres) in the VR3pt viewer",
+     )
++    parser.add_argument(
++        "--robot", type=str, default="g1", choices=["g1", "h2"],
++        help="Robot whose FK the VR3PT calibration references (default: g1)",
++    )
+     parser.add_argument(
+         "--input-source",
+         type=str,
+@@ -2285,6 +2305,7 @@ if __name__ == "__main__":
+             use_cuda=args.cuda,
+             record_dir=args.record_dir,
+             record_format=args.record_format,
++            robot=args.robot,
+             zmq_feedback_host=args.zmq_feedback_host,
+             zmq_feedback_port=args.zmq_feedback_port,
+             enable_vis_vr3pt=args.vis_vr3pt,
