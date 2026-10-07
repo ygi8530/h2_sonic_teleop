@@ -62,7 +62,7 @@ overlay만 보관한다 → 업스트림이 업데이트돼도 overlay 재적용
 
 ## 실행 (시뮬 teleop)
 
-> 처음이면 먼저 **`docs/INSTALL.md`** — 폴더 배치, MuJoCo 버전(3.3.7), 환경별 설치, PICO 없이 돌리는 검증 절차.
+> 처음이면: `bash setup.sh`(업스트림) → `bash setup_sim.sh`(공식 MuJoCo 설치+씬 생성). 상세는 **`docs/INSTALL.md`** — 폴더 배치, MuJoCo 버전(3.3.7), 환경별 설치, PICO 없이 돌리는 검증 절차.
 
 사전: XRoboToolkit PC Service 설치, PICO 앱 Status=WORKING, `setup.sh`로 업스트림 준비.
 
