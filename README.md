@@ -87,6 +87,25 @@ docker compose -f docker/docker-compose.yaml -f docker/docker-compose.local.yaml
 
 모드: `--mode smpl` = 전신(발 포함) 모방 / `--mode teleop` = 손+가슴 3점만, 다리는 자동 균형.
 
+## BONES-SEED 클립 재생 (PICO 없이, 데이터셋 모션으로 구동)
+
+러너의 `--offline-smpl` 모드: BONES-SEED의 SMPL 원본 클립을 50 Hz로 밀어넣어
+정책의 smpl 입구(전신 모방)로 로봇을 구동한다 — PICO 자리에 녹화 데이터가 들어가는 것.
+
+```bash
+bash setup_dataset.sh     # nvidia/GEAR-SONIC에서 수신, ~30 GB → ../bones_seed/
+source .venv_sim/bin/activate && export PYTHONPATH=$PWD/h2_policy_server
+
+python mujoco_support/sim/h2_vr_teleop_sim.py --viewer \
+  --offline-smpl ../bones_seed/data/smpl_filtered/walk_forward_loop_001__A029.pkl \
+  --offline-dof  ../wbc_h12/h2_tools/sample_motions/walk_forward_loop_001__A029.pkl
+```
+
+- `--offline-dof`(선택): 같은 이름의 리타게팅 pkl에서 손목각 참조를 공급 — wbc_h12 동봉
+  3클립(idle_loop_003__A041, neutral_idle_loop_002__A104, walk_forward_loop_001__A029)은 바로 페어 가능.
+  다른 클립은 생략해도 재생됨(손목 참조 0 → 팔 디테일만 저하).
+- 131,455클립 어떤 것이든 같은 방식. 낙상·리셋(R)·중력 전부 teleop과 동일.
+
 ## 검증 이력 (이 번들의 신뢰 근거)
 
 - 서버 `act()` ≡ 러너의 encode+proprio+decode: 오차 1.9e-6 (float32 노이즈)
