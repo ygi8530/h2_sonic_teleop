@@ -1,4 +1,5 @@
 .venv_sim/
-mujoco_support/assets/        # 씬은 컴퓨터마다 setup_sim.sh로 생성 (절대경로 포함)
+# 씬은 컴퓨터마다 setup_sim.sh로 생성 (절대경로 포함)
+mujoco_support/assets/
 __pycache__/
 *.pyc
