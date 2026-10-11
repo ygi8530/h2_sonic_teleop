@@ -479,6 +479,8 @@ def main():
             z = float(data.qpos[2])
             log["t"].append(sim_t)
             log["pelvis_z"].append(round(z, 4))
+            log.setdefault("root_xy", []).append(
+                [round(float(data.qpos[0]), 4), round(float(data.qpos[1]), 4)])
             if z < 0.35 and not fallen:
                 fallen = True
                 falls += 1
@@ -521,6 +523,7 @@ def main():
         Path(args.out).write_text(json.dumps(
             {"mode": args.mode, "seconds": step * CONTROL_DT, "falls": falls,
              "root_xy_disp_m": xy_disp,
+             "t": log["t"], "root_xy": log.get("root_xy", []),
              "fall_t": log["fall_t"], "pelvis_z_min": min(log["pelvis_z"] or [0]),
              "pelvis_z_final": (log["pelvis_z"] or [0])[-1]}, indent=1))
         print(f"[Teleop] wrote {args.out}")
