@@ -336,6 +336,15 @@ def main():
     ap.add_argument("--seconds", type=float, default=0.0, help="auto-stop after N sim seconds (0=run)")
     ap.add_argument("--autostart", action="store_true", help="start policy immediately (no 'S')")
     ap.add_argument("--out", default=None, help="write a result JSON (diagnostic)")
+    ap.add_argument("--push-every", type=float, default=0.0,
+                    help="every N s, SET base xy velocity to --push-mag in --push-dirs "
+                         "(training push_robot semantics). 0=off")
+    ap.add_argument("--push-at", type=float, default=0.0,
+                    help="single push at this time [s] (alternative to --push-every)")
+    ap.add_argument("--push-mag", type=float, default=0.5, help="push velocity magnitude [m/s]")
+    ap.add_argument("--push-dirs", default="cycle8",
+                    choices=["cycle8", "back", "front", "left", "right"],
+                    help="world-frame direction(s); robot faces +x, so 'back' = -x")
     ap.add_argument("--video", default=None, help="offscreen mp4 (EGL, 25 fps)")
     args = ap.parse_args()
 
@@ -404,6 +413,17 @@ def main():
         print("[Teleop] keys: S=track/stand toggle (or squeeze BOTH grips), R=reset. "
               "Robot stands in place until tracking starts.")
 
+    _DIR = {"back": (-1.0, 0.0), "front": (1.0, 0.0), "left": (0.0, 1.0), "right": (0.0, -1.0)}
+    push_times = []
+    if args.push_every > 0:
+        tt = args.push_every
+        while tt < (args.seconds or 1e9):
+            push_times.append(tt)
+            tt += args.push_every
+    elif args.push_at > 0:
+        push_times.append(args.push_at)
+    push_idx = 0
+
     hist = ProprioHistory()
     last_action = np.zeros(NUM_DOF, np.float32)
     step = 0
@@ -466,6 +486,20 @@ def main():
             else:
                 target = default_mj  # no fixture and no stream yet: PD hold
 
+            if push_idx < len(push_times) and sim_t >= push_times[push_idx]:
+                if args.push_dirs == "cycle8":
+                    ang = push_idx * np.pi / 4.0
+                    d = (np.cos(ang), np.sin(ang))
+                else:
+                    d = _DIR[args.push_dirs]
+                data.qvel[0] = args.push_mag * d[0]
+                data.qvel[1] = args.push_mag * d[1]
+                log.setdefault("pushes", []).append(
+                    {"t": round(sim_t, 2), "vx": round(args.push_mag * d[0], 3),
+                     "vy": round(args.push_mag * d[1], 3)})
+                print(f"[Teleop] PUSH t={sim_t:.1f}s v=({d[0]:+.2f},{d[1]:+.2f})x{args.push_mag}")
+                push_idx += 1
+
             for _ in range(PHYSICS_SUBSTEPS):
                 data.ctrl[:] = kp * (target - data.qpos[7:]) - kd * data.qvel[6:]
                 mujoco.mj_step(model, data)
@@ -524,6 +558,7 @@ def main():
             {"mode": args.mode, "seconds": step * CONTROL_DT, "falls": falls,
              "root_xy_disp_m": xy_disp,
              "t": log["t"], "root_xy": log.get("root_xy", []),
+             "pushes": log.get("pushes", []),
              "fall_t": log["fall_t"], "pelvis_z_min": min(log["pelvis_z"] or [0]),
              "pelvis_z_final": (log["pelvis_z"] or [0])[-1]}, indent=1))
         print(f"[Teleop] wrote {args.out}")
